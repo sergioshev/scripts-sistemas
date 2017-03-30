@@ -1,0 +1,280 @@
+#!/bin/bash
+#
+# $Id: cargarACLs,v 1.5 2016/11/25 18:29:43 sshevtsov Exp $
+#
+# Script que establece los permisos sobre la estructura de directorio
+# a servir.
+#
+# Sintaxis de asignación de permisos:
+#         dir:user1,user2...
+#         (no se contemplan espacios entre comas ni ':')
+#
+
+base_dir="/var/lib/samba_shares/F"
+
+perm_total='rwx'
+perm_r='r-x'
+perm_x='--x'
+perm_rw='rwx'
+perm_forbiden='---'
+
+
+groups=(
+  'administracion'
+  'stock'
+  'mantenimiento'
+  'jefemant'
+  'seguridad'
+  'jefesegu'
+  'operaciones'
+  'jefeoper'
+  'embarque'
+  'movimiento'
+  'secretaria'
+)
+
+users=(
+  'aparle'
+  'ctrobo'
+  'asepulveda'
+  'gtristan'
+  'athomas'
+  'jzapata'
+  'malvarez'
+  'fllona'
+  'jmiralles'
+  'jortiz'
+  'lguazzetti'
+  'rdurruty'
+  'darce'
+  'srivarola'
+  'gescobar'
+  'mclementi'
+  'gmedina'
+  'wkjer'
+  'lcabezas'
+  'dromero'
+  'aberasain'
+  'diriarte'
+  'mmonjes'
+  'lvillar'
+  'rmeske'
+)
+
+so_users=(
+  'www-data'
+  'postgres'
+)
+
+members=(
+  'administracion:aparle,lguazzetti,darce,srivarola,gescobar'
+  'stock:aparle,lguazzetti,gescobar,darce'
+  'secretaria:aparle,srivarola,lguazzetti'
+  'mantenimiento:asepulveda,athomas,dbustamante,ppantaleone,mclementi,gmedina'
+  'jefemant:athomas'
+  'seguridad:athomas,malvarez,fllona'
+  'jefesegu:malvarez'
+  'operaciones:gtristan,jzapata,jmiralles,jortiz,rdurruty,wkjer'
+  'jefeoper:jzapata'
+  'vigilancia:cnaya,jugalde,jcabrera'
+  'embarque:dromero,aberasain,diriarte,mmonjes,lvillar,rmeske,lcabezas'
+  'movimiento:lcabezas'
+)
+
+perms=(
+  "a_export:$perm_rw:sistemas,stock,operaciones"
+  "admcupo:$perm_rw:sistemas,jefeoper,operaciones,stock"
+  "administracion:$perm_rw:sistemas,administracion"
+  "cartase:$perm_rw:sistemas,administracion"
+  "embarque:$perm_rw:embarque,sistemas,operaciones,stock"
+  "entrada:$perm_rw:sistemas,operaciones,stock"
+  "javier:$perm_rw:sistemas,movimiento,operaciones"
+  "movimi:$perm_rw:sistemas,operaciones,movimiento,stock"
+  "p3:$perm_rw:sistemas,stock,postgres,www-data"
+  "stock145:$perm_rw:sistemas,stock,operaciones,administracion,embarque,postgres,www-data"
+  "tablas:$perm_rw:sistemas,operaciones,stock,movimiento,embarque,www-data"
+  "jmiralles:$perm_rw:sistemas,operaciones"
+  "operaciones:$perm_rw:sistemas,operaciones"
+  "operaciones:$perm_r:secretaria"
+  "operaciones/INDICE VOLCADORAS:$perm_rw:sistemas,operaciones,secretaria"
+  "operaciones/Embarque:$perm_rw:sistemas,operaciones,secretaria"
+  "sistemas:$perm_rw:sistemas"
+)
+
+
+create_users() {
+  for u in ${users[@]} ; do
+    echo smbldap-useradd -n -A 1 -B 0 -a $u
+    echo "echo \"$u\" | smbldap-passwd -s -p $u"
+  done
+}
+
+delete_users() {
+  for u in ${users[@]} ; do
+    echo smbldap-userdel $u
+  done
+}
+
+create_groups() {
+  for g in ${groups[@]} ; do
+    echo smbldap-groupadd $g
+  done
+}
+
+delete_groups() {
+  for g in ${groups[@]} ; do
+    echo smbldap-groupdel $g
+  done
+}
+
+create_membership() {
+  for m in ${members[@]} ; do
+    g=$(echo $m | cut -d ':' -f 1)
+    us=$(echo $m | cut -d ':' -f 2)
+    OIFS=IFS
+    IFS=,
+    for u in ${us[@]} ; do
+      echo smbldap-groupmod -m $u $g
+    done
+    IFS=$OIFS
+  done
+}
+
+delete_membership() {
+  for m in ${members[@]} ; do
+    g=$(echo $m | cut -d ':' -f 1)
+    us=$(echo $m | cut -d ':' -f 2)
+    OIFS=IFS
+    IFS=,
+    for u in ${us[@]} ; do
+      echo smbldap-groupmod -x $u $g
+    done
+    IFS=$OIFS
+  done
+}
+
+is_user() {
+  ret=1
+  user=$1
+  for u in ${users[@]} ; do 
+    if [ $user == "$u" ] ; then
+      ret=0
+      break;
+    fi
+  done
+  return $ret
+}
+
+is_group() {
+  ret=1
+  group=$1
+  for g in ${groups[@]} ; do 
+    if [ $group == "$g" ] ; then
+      ret=0
+      break;
+    fi
+  done
+  return $ret
+}
+
+load_acls() {
+  OFS=$IFS
+  IFS='
+'
+  odir=''
+  echo "Estableciendo [$perm_r] en directorio base para" 1>&2
+  for u in ${so_users[@]} ; do
+    echo "setfacl -m u:$u:$perm_r \"$base_dir\""
+  done
+  for u in ${users[@]} ; do
+    echo "setfacl -m u:$u:$perm_r \"$base_dir\""
+  done
+  for g in ${groups[@]} ; do
+    echo "setfacl -m g:$g:$perm_r \"$base_dir\""
+  done
+  for data in ${perms[@]} ; do 
+    if [ ! "${data}X" == "X" ] ; then
+      #dir=$(echo "$data" | sed -e 's/^\([^:]\+\).*/\1/')
+      #entities=$(echo "$data" | sed -e 's/^[^:]\+:\(.*\)/\1/')
+      dir=$(echo "$data" | cut -f 1 -d :)
+      perm=$(echo "$data" | cut -f 2 -d :)
+      entities=$(echo "$data" | cut -f 3 -d :)
+      if [ "$dir" != "$odir" ] ; then
+        echo "Borrando permisos en [$dir]" 1>&2
+        echo "setfacl -R -b \"$base_dir/$dir\""
+        echo "Estableciendo permisos [$perm_forbiden] en [$dir]" 1>&2
+        echo "setfacl -R -m o::$perm_forbiden \"$base_dir/$dir\""
+      fi
+      IFS=,
+      for e in $entities ; do
+        entity_type="u"
+        if is_group $e ; then
+          entity_type="g"
+        fi
+        if is_user $e ; then
+          entity_type="u"
+        fi
+        echo "Estableciendo permisos [$perm] en [$dir] para [$e:$entity_type]"  1>&2
+        echo "setfacl -R -m $entity_type:$e:$perm \"$base_dir/$dir\""
+        echo "setfacl -R -m d:$entity_type:$e:$perm \"$base_dir/$dir\""
+      done
+      IFS=$OFS
+      odir=$dir
+    fi
+  done
+}
+
+
+case $1 in
+  (fullsetup)
+    delete_groups
+    delete_users
+    create_groups
+    create_users
+    create_membership
+    load_acls
+  ;;
+  (acls)
+    load_acls
+  ;;
+  (cgroups)
+    create_groups
+  ;;
+  (dgroups)
+    delete_groups
+  ;;
+  (cusers)
+    create_users
+  ;;
+  (dusers)
+    delete_users
+  ;;
+  (cmembers)
+    create_membership
+  ;;
+  (dmembers)
+    delete_membership
+  ;;
+  (*)
+    cat <<FFAA
+   $0 [ fullsetup | cgroups | dgroups | cusers | dusers | cmembers | dmembers | acls ]
+
+   fullsetup - todas las acciones necesarias para borrar tod y establecer 
+     los grupos, usuarios, membresias y los permisos
+
+   cgroups - crea los grupos
+  
+   dgroups - borra los grupos
+
+   cusers - crea los usuarios
+
+   dusers - elimina los usuarios
+
+   cmembers - crea las membresias
+
+   dmembers - elimina las membresias
+
+   acls - recarga las acls
+FFAA
+  ;;
+esac

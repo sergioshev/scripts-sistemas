@@ -1,0 +1,101 @@
+#!/bin/bash
+
+archived_path=/backup/camaras/archivado
+packed_path=/backup/camaras/compactado
+
+root_dir=/backup/camaras
+sub_dirs="bruto cabinavigilan calado calado_01 calado_02 calado_03 calado_04 panol porton prefectura"
+
+
+function move_files {
+  for dir in $sub_dirs ; do
+    find "$root_dir/$dir" -maxdepth 1 -iname '*.jpg' -or -iname '*.jpeg' -or -iname '*.avi' | while read file ; do
+      last_change=$( stat -c %Y "$file" )
+      if [ "x$last_change" == "x" ] ; then
+        continue
+      fi
+  
+      year=$( date +%Y --date="@$last_change" )
+      year_month=$( date +%Y-%m --date="@$last_change" )
+      year_month_day=$( date +%Y-%m-%d --date="@$last_change" )
+      hours=$( date +%H --date="@$last_change" )
+  
+      dest="$archived_path/$dir/$year/$year_month/$year_month_day/$hours"
+  
+      [ -d "$dest" ] || install -m 775 -d "$dest" > /dev/null 2>&1
+  
+      echo "Moviendo «$file» a «$dest»"
+      mv "$file" "$dest"
+    done
+  done
+}
+
+function pack_files {
+  curr_dir=$(pwd)
+  tmpdir='_packedfiles_'
+  IFS='
+'
+  echo Creando archivos tar
+  find "$archived_path" -depth -mindepth 5 -maxdepth 5 -type d | while read dir ; do
+    echo "Procesando $dir"
+    cd "$dir"
+    mkdir -p "$tmpdir"
+    mv *.jpg *.jpeg *.avi "$dir/$tmpdir" &>/dev/null
+    cd "$tmpdir"
+    # is_empty NO es null si el directorio es VACIO
+    #          ES null si el directorio NO es VACIO
+    is_empty=$(find -maxdepth 0 -type d -empty)
+    [ -z $is_empty ] && { # tengo archivos, is_empty es null
+      tar_filename="$(date '+%Y-%m-%d_%H-%M-%S').tar"
+      echo "$dir compactado en $tar_filename"
+      tar cf "$tar_filename" --remove-files *
+      mv *.tar ..
+    }
+#    rm -r "$tmpdir"
+  done
+  echo Moviendo archivos tar
+  find "$archived_path" -depth -type f -name '*.tar' | while read tarfile ; do
+    dir=${tarfile%/*}
+    packed_dst_dir="$packed_path/${dir#$archived_path/}"
+    mkdir -p $packed_dst_dir
+    mv "$tarfile" "$packed_dst_dir"
+    echo "$tarfile movido a $packed_dst_dir"
+  done
+  echo Purgando directorios vacios
+  find "$archived_path" -depth -type d -empty -delete
+  cd "$curr_dir"
+}
+
+function hs_split {
+  curr=$(pwd)
+  find "$archived_path" -depth -maxdepth 4 -mindepth 4 -type d | while read cdir ; do
+    echo Entrando en $cdir
+    cd "$cdir"
+    ls -1 *.jpeg *.jpg *.avi 2>/dev/null | while read file ; do
+      ts=$(stat -c %Y "$file")
+      dir=$(date -d "@$ts" "+%H")
+      mkdir -p $dir
+      mv "$file" "$dir"
+    done
+  done
+  cd "$curr"
+}
+
+
+case "$1" in 
+  move)
+    echo Funcion move
+    move_files
+  ;;
+  pack)
+    echo Funcion pack
+    pack_files
+  ;;
+  hs-split)
+    echo Funcion hs-split
+    hs_split
+  ;;
+  *)
+    echo "Uso $0 [ move | pack | hs-split ]"
+  ;;
+esac

@@ -1,0 +1,96 @@
+#!/bin/bash
+#
+# $Id: laridae_log_filter,v 1.2 2016/02/27 18:11:43 aosorio Exp $
+#
+# Script para filtrar los logs de Laridae con el fin de reducir el tamaño
+# del archivo que luego serán importados desde ACL.
+#
+# El log filtrado se moverá a «logfiltered_dir».
+#
+
+logfile=$1
+logfiltered_dir=/var/log/laridae_log_filtrado/Aplanar/aplanado
+
+logname="$( basename $logfile | sed  's/.csv\(.bz2\)\?$//g' )"
+
+if [ "X$logfile" == "X" ] || ! [ -r "$logfile" ] ; then
+  echo "Error: No se puede leer el archivo «$logfile»" 1>&2
+  cat <<FFAA
+
+Modo de uso:
+
+	$0 <logfile>
+
+FFAA
+  exit 1
+fi
+
+tmpfile1=$( mktemp /tmp/log_laridae_filtrado_1_XXXX )
+tmpfile2=$( mktemp /tmp/log_laridae_filtrado_2_XXXX )
+tmpfile3=$( mktemp /tmp/log_laridae_filtrado_3_XXXX )
+
+if ! [ -w "$tmpfile1" ] || ! [ -w "$tmpfile2" ] || ! [ -w "$tmpfile3" ] ; then
+  echo "No se pudieron crear los archivos temporales. Se aborta la ejecución." 1>&2
+  exit 1
+fi
+
+echo "-------------------------------------------------"
+echo "Archivo inicial: $logfile"
+echo "Tamaño: $( ls -lsh $logfile | cut -f 1 -d \  )"
+echo "Filas: $( wc -l $logfile | cut -f 1 -d \  )"
+echo "-------------------------------------------------"
+echo ""
+
+if [ -n "$( file -b $logfile | grep bzip )" ] ; then
+  logfile_uncompressed=$( mktemp /tmp/log_laridae_filtrado_uncompressed_XXXX )
+  echo "Descomprimiendo el archivo de log..."
+  bzip2 -dkqc "$logfile" > "$logfile_uncompressed"
+  if [ $? ] ; then
+    logfile="$logfile_uncompressed"
+  else
+    echo "No se pudo descomprimir el archivo de log" 1>&2
+    exit 2
+  fi
+fi
+
+# Primer paso: Convertir el log multilínea a log unilínea.
+echo "$( date +%F\ %T ) - Paso 1: Convirtiendo log a unilínea"
+./laridae_log_unilinea.pl < "$logfile" > "$tmpfile1"
+
+# Segundo paso: Filtrado de las columnas
+echo "$( date +%F\ %T ) - Paso 2: Filtrando columnas irrelevantes"
+./laridae_log_cols_filtradas.pl "$tmpfile1" > "$tmpfile2"
+
+# Tercer paso: Filtrado de las filas innecesarias
+echo "$( date +%F\ %T ) - Paso 3: Filtrando filas con información irrelevante"
+cat "$tmpfile2" | \
+  grep -vi 'sentencia: SET' | \
+  grep -vi 'sentencia: select consulta_productividad' | \
+  grep -vi 'sentencia: copy' | \
+  grep -vi 'sentencia: SELECT pg_catalog' | \
+  grep -vi 'from pg_' | \
+  grep -vi 'from monitor_embarque' | \
+  grep -vi 'lock table' | \
+  grep -vi 'activeco' | \
+  grep -vi 'from monitor_embarque' | \
+  grep -vi 'duración: ' | \
+  grep -vi 'dbase_' | \
+  grep -vi 'from cdmd_cereal_total' | \
+  grep -vi 'Actualizando vista materializada' | \
+  grep -vi 'sentencia: SELECT cdmd_totalizador' | \
+  grep -vi 'sentencia: CREATE' | \
+  grep -vi 'sentencia: \/\*' | \
+  grep -vi 'pg_database_size' > "$tmpfile3"
+
+echo -e "$( date +%F\ %T ) - Fin\n"
+
+echo "-------------------------------------------------"
+echo "Archivo final: $tmpfile3"
+echo "Tamaño: $( ls -lsh $tmpfile3 | cut -f 1 -d \  )"
+echo "Filas: $( wc -l $tmpfile3 | cut -f 1 -d \  )"
+echo "-------------------------------------------------"
+
+echo "Moviendo «$tmpfile3» a «$logfiltered_dir/$logname"".csv»"
+mv "$tmpfile3" "$logfiltered_dir/$logname".csv
+
+rm -f "$tmpfile1" "$tmpfile2" "$tmpfile3" "$logfile_uncompressed"

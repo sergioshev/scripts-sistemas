@@ -1,0 +1,793 @@
+#!/bin/bash
+#
+# $Id: generarAclsZeus,v 1.48 2016/12/29 09:40:56 sshevtsov Exp $
+#    Script para generar instrucciones para establecer permisos sobre el 
+# sistema de archivos ubicado en d:\TQ1 en el servidor Zeus (w2008).
+#
+#    Se escriben las llamadas de modificacion en la salida estandar ideal para
+# redirigir la salida a un archivo .bat para ser ejecutado en sobre el mismo
+# servidor.
+
+# Formato:
+# se define la matriz de permisos con el siguiente formato
+# <dir><tab><usr><tab><mascara_de_permismos>
+# Para ver como es la mascara ver el man de Icacls al final del archivo.
+#
+#   Aca se asume que los usuarios ya estan creados en el servidor asi como
+# los directorios para los cuales se tienem que aplicar los permisos.
+# Los permisos que es van a establecer aca son de  modificacion ya que 
+# para la lectura lo tienen todos.
+#
+
+base_unit="D"
+base_dir="TQ1"
+base_path="$base_unit:\\$base_dir"
+
+lectura="(S,MA,GR,GE,RD,RA,X)"
+lectura_escritura="(DE,RC,S,MA,GA,RD,WD,AD,X,DC)"
+#                  (DE,AS,WO,S,GA,RD,WD,AD,REA,WEA,X,DC)
+total="(DE,RC,WDAC,WO,S,AS,MA,GR,GW,GE,GA,RD,WD,AD,REA,WEA,X,DC,RA,WA)"
+herencia="(OI)(CI)"
+
+users=(
+  'aparle'
+  'cnaya'
+  'ctrobo'
+  'asepulveda'
+  'gtristan'
+  'jcabrera'
+  'athomas'
+  'jzapata'
+  'malvarez'
+  'fllona'
+  'jmiralles'
+  'jortiz'
+  'jugalde'
+  'lguazzetti'
+  'dbustamante'
+  'ppantaleone'
+  'hdau'
+  'rdurruty'
+  'darce'
+  'srivarola'
+  'gescobar'
+  'mclementi'
+  'gmedina'
+  'wkjer'
+  'lcabezas'
+  'dromero'
+  'aberasain'
+  'diriarte'
+  'mmonjes'
+  'lvillar'
+  'rmeske'
+)
+
+groups=(
+  'administracion'
+  'stock'
+  'secretaria'
+  'personal'
+  'mantenimiento'
+  'jefemant'
+  'seguridad'
+  'jefesegu'
+  'operaciones'
+  'jefeoper'
+  'vigilancia'
+  'embarque'
+  'movimiento'
+)
+
+members=(
+  'administracion:aparle,ctrobo,lguazzetti,hdau,darce,srivarola,gescobar'
+  'stock:aparle,lguazzetti,gescobar,darce'
+  'secretaria:aparle,srivarola,lguazzetti'
+  'personal:hdau'
+  'mantenimiento:asepulveda,athomas,dbustamante,ppantaleone,mclementi,gmedina'
+  'jefemant:athomas'
+  'seguridad:athomas,malvarez,fllona'
+  'jefesegu:malvarez'
+  'operaciones:gtristan,jzapata,jmiralles,jortiz,rdurruty,wkjer'
+  'jefeoper:jzapata'
+  'vigilancia:cnaya,jugalde,jcabrera'
+  'embarque:dromero,aberasain,diriarte,mmonjes,lvillar,rmeske'
+  'movimiento:lcabezas'
+)
+
+
+setup_acls() {
+{ cat <<FFAA
+#### administracion ####
+administracion	sistemas	$total
+administracion	stock	$lectura_escritura
+administracion	administracion	$lectura_escritura
+
+#### administracion\conciliaciones ####
+administracion\conciliaciones	stock	$lectura_escritura
+administracion\conciliaciones	sistemas	$total
+
+#### administracion\impuestos ####
+administracion\impuestos	sistemas	$total
+administracion\impuestos	stock	$lectura_escritura
+
+#### ahp-stock  ####
+ahp-stock	administracion	$lectura_escritura
+ahp-stock	sistemas	$total
+
+### Documentos SIG  ###
+Documentos SIG	administracion	$lectura
+Documentos SIG	mantenimiento	$lectura
+Documentos SIG	operaciones	$lectura
+Documentos SIG	movimiento	$lectura
+Documentos SIG	embarque	$lectura
+Documentos SIG	seguridad	$lectura_escritura
+Documentos SIG	sistemas	$total
+
+### Documentos SIG  ###
+Documentos SIG\Registros	seguridad	$lectura_escritura
+Documentos SIG\Registros	sistemas	$total
+
+#### fichadas zona primaria ####
+fichadas_zp	sistemas	$total
+fichadas_zp	personal	$lectura_escritura
+
+#### gerencia ####
+gerencia	stock	$lectura_escritura
+gerencia	sistemas	$total
+
+#### mantenimiento ####
+mantenimiento	mantenimiento	$lectura_escritura
+mantenimiento	sistemas	$total
+
+#### Puestos
+Puestos	personal	$lectura_escritura
+Puestos	mantenimiento	$lectura_escritura
+Puestos	sistemas	$total
+Puestos	seguridad	$lectura_escritura
+Puestos	operaciones	$lectura_escritura
+
+#### siclaser ####
+siclaser	sistemas	$total
+siclaser	stock	$lectura_escritura
+
+#### sistemas ####
+sistemas	sistemas	$total
+sistemas	jefemant	$lectura_escritura
+sistemas	athomas	$lectura_escritura
+
+#### term2 ####
+#term2	mantenimiento	$lectura_escritura
+#term2	sistemas	$total
+
+#### terminal2 ####
+#terminal2	mantenimiento	$lectura_escritura
+#terminal2	sistemas	$total
+
+#### vigilan ####
+vigilan	administracion	$lectura_escritura
+vigilan	vigilancia	$lectura_escritura
+vigilan	mantenimiento	$lectura_escritura
+vigilan	embarque	$lectura_escritura
+vigilan	seguridad	$lectura_escritura
+vigilan	operaciones	$lectura_escritura
+vigilan	movimiento	$lectura_escritura
+vigilan	embarque	$lectura_escritura
+vigilan	sistemas	$total
+
+FFAA
+} | egrep -v '^#|^$' | sed -e 's/\\/\\\\/g' | {
+    oifs=$IFS 
+    odir='' 
+    cmd='' ; cmd1='' ; cmd1_1='' ; cmd2='' ; cmd3=''
+    IFS="	" 
+    while read dir user perm; do
+      if [ "$odir" != "$dir" ] ; then
+        [ "x$cmd" != "x" ] && { 
+          echo $cmd3 "/T /C"
+          echo $cmd1 "/T /C"
+          echo $cmd1_1 "/T /C"
+          echo $cmd  "/T /C" 
+          echo $cmd2 "/T /C" 
+          cmd='' ; cmd1='' ; cmd1_1='' ; cmd2='' ; cmd3=''
+        }
+        cmd="icacls \"$base_path\\$dir\" /grant:r $user:${herencia}${perm}"
+        cmd1="icacls \"$base_path\\$dir\" /remove:g ${users[*]}"
+        cmd1_1="icacls \"$base_path\\$dir\" /remove:g ${groups[*]}"
+        cmd2="icacls \"$base_path\\$dir\\*\" /inheritance:e"
+        cmd3="icacls \"$base_path\\$dir\" /inheritance:d"
+        odir="$dir"
+      else
+        cmd="$cmd $user:${herencia}${perm}"
+      fi
+    done
+    echo $cmd3 "/T"
+    echo $cmd1 "/T"
+    echo $cmd1_1 "/T"
+    echo $cmd  "/T" 
+    echo $cmd2 "/T" 
+    IFS=$oifs
+  }
+}
+
+#1) primero se fuerza el dueño de todo el subarbol a Administrador para que 
+#no existan problemas con configuraciones de ACLs. De este modo se setea el
+#estado conocido.
+#
+#>takeown /F "d:\tq1" /A /R /D S
+#
+#2) Trabajando con las acls
+#
+#nos hacemos dueños de todo en foma explicita, NO heredada
+#
+#>icacls "d:\tq1" /setowner Administrador /T
+#
+#obtenemos el control completo de todo explicitamente
+#
+#>icacls "d:\tq1" /grant:r Administrador:F /T
+#>icacls "d:\tq1" /grant:r sistemas:F /T
+#se quitan todos los permisos de herencia a todo el subarbol
+#
+#>icacls "d:\tq1" /inheritance:d /T
+#
+#sacamos acls para usuarios autenticados y usuarios comunes
+#
+#>icacls "d:\tq1" /remove:g *S-1-5-11 /T
+#>icacls "d:\tq1" /remove:g Usuarios
+#
+#permitimos ver la raiz a todos
+#
+#>icacls "d:\tq1" /grant:r common_tq_users:(GR,RD,X)
+
+
+# aca se resumen los pasos documentados
+init_fs() {
+cat <<FFAA
+takeown /F "$base_path" /A /R /D S
+icacls "$base_path" /setowner Administrador /T
+icacls "$base_path" /grant:r Administrador:F /T
+icacls "$base_path" /grant:r sistemas:F /T
+icacls "$base_path" /inheritance:d /T
+icacls "$base_path" /remove:g *S-1-5-11 /T
+icacls "$base_path" /remove:g Usuarios
+FFAA
+for g in ${groups[@]} ; do
+  echo "icacls \"$base_path\" /grant:r $g:(GR,RD,X)"
+done
+}
+
+create_groups() {
+  for g in ${groups[@]} ; do
+    echo "net localgroup $g /add"
+  done
+}
+
+delete_groups() {
+  for g in ${groups[@]} ; do
+    echo "net localgroup $g /del"
+  done
+}
+
+
+create_users() {
+  for u in ${users[@]} ; do
+    echo "net user $u $u /add"
+    echo "WMIC USERACCOUNT WHERE \"Name='$u'\" SET PasswordExpires=FALSE"
+  done
+}
+
+delete_users() {
+  for u in ${users[@]} ; do
+    echo "net user $u /del"
+  done
+}
+
+create_membership() {
+  for m in ${members[@]} ; do
+    g=$(echo $m | cut -d ':' -f 1)
+    us=$(echo $m | cut -d ':' -f 2)
+    OIFS=IFS
+    IFS=,
+    for u in ${us[@]} ; do
+      echo "net localgroup $g $u /add"
+    done
+    IFS=$OIFS
+  done
+}
+
+delete_membership() {
+  for m in ${members[@]} ; do
+    g=$(echo $m | cut -d ':' -f 1)
+    us=$(echo $m | cut -d ':' -f 2)
+    OIFS=IFS
+    IFS=,
+    for u in ${us[@]} ; do
+      echo "net localgroup $g $u /del"
+    done
+    IFS=$OIFS
+  done
+}
+
+
+op=$1;
+case "$op" in
+  (fullsetup)
+    delete_groups
+    delete_users
+    create_groups
+    init_fs
+    create_users
+    create_membership
+    setup_acls
+  ;;
+  (initfs)
+     init_fs
+  ;;
+  (acls)
+    init_fs
+    setup_acls
+  ;;
+  (members)
+    delete_membership
+    create_membership
+  ;;
+  (cusers)
+    create_users
+  ;;
+  (cgroups)
+    create_groups
+  ;;
+  (cmembers)
+    create_membership
+  ;;
+  (dusers)
+    create_users
+  ;;
+  (dgroups)
+    create_groups
+  ;;
+  (dmembers)
+    create_membership
+  ;;
+  (*)
+    echo "$0 [ fullsetup | initfs | acls | members |cusers | cgroups | cmembers | dusers | dgroups | dmembers ]"
+cat <<FFAA
+   fullsetup - hace todas las operaciones para construir los permisos
+   initfs - inicializa la raiz del sistema de archivos
+   acls - crea las acls sobre el sistema de archivos
+   members - inicializa las membrecias
+   cusers - crea los usuarios definidos
+   cgroups - crea los grupos definidos
+   cmembers - crea las membrecias
+   dgroups - borra las membrecias
+   dusers - borra los usuarios
+   dmembers - borra las membrecias
+FFAA
+  ;;
+esac
+
+##### a_cargad #### 
+#a_cargad	aparle	administracion jefes
+#a_cargad	sistemas sistemas
+#a_cargad	stock	administracion stock
+#a_cargad	supadmin administracion stock
+#a_cargad	darce administracion jefes
+#
+##### administracion #### administracion 
+#administracion	aparle	administracion jefes
+#administracion	ctrobo	administracion
+#administracion	lorena	$lectura_escritura
+#administracion	lguazzetti	$lectura_escritura
+#administracion	personal	$lectura_escritura
+#administracion	hdau	$lectura_escritura
+#administracion	saturno	$lectura_escritura
+#administracion	darce	$lectura_escritura
+#administracion	srivarola	$lectura_escritura
+#administracion	sistemas	$total
+#administracion	stock	$lectura_escritura
+#administracion	gescobar	$lectura_escritura
+#administracion	supadmin	$lectura_escritura
+#
+##### administracion\conciliaciones #### administracion jefes y impuestos
+#administracion\conciliaciones	aparle	$lectura_escritura
+#administracion\conciliaciones	lorena	$lectura_escritura
+#administracion\conciliaciones	lguazzetti	$lectura_escritura
+#administracion\conciliaciones	saturno	$lectura_escritura
+#administracion\conciliaciones	darce	$lectura_escritura
+#administracion\conciliaciones	sistemas	$total
+#administracion\conciliaciones	supadmin	$lectura_escritura
+#administracion\conciliaciones	stock	$lectura_escritura
+#
+##### administracion\impuestos #### administracion impuestos
+#administracion\impuestos	aparle	$lectura_escritura
+#administracion\impuestos	lorena	$lectura_escritura
+#administracion\impuestos	lguazzetti	$lectura_escritura
+#administracion\impuestos	darce	$lectura_escritura
+#administracion\impuestos	saturno	$lectura_escritura
+#administracion\impuestos	sistemas	$total
+#administracion\impuestos	supadmin	$lectura_escritura
+#
+#### agenda ### administracion completa
+#agenda	aorofino	$lectura_escritura
+#agenda	aparle	$lectura_escritura
+#agenda	sistemas	$total
+#
+##### ahp-stock  #### administracion jefes stock
+#ahp-stock	aparle	$lectura_escritura
+#ahp-stock	lorena	$lectura_escritura
+#ahp-stock	lguazzetti	$lectura_escritura
+#ahp-stock	saturno	$lectura_escritura
+#ahp-stock	darce	$lectura_escritura
+#ahp-stock	srivarola	$lectura_escritura
+#ahp-stock	sistemas	$total
+#ahp-stock	stock	$lectura_escritura
+#ahp-stock	gescobar	$lectura_escritura
+#ahp-stock	supadmin	$lectura_escritura
+#
+#### Documentos SIG  ### publico lectura, matenimiento seguridad escritura
+#Documentos SIG	aorofino	$lectura
+#Documentos SIG	aparle	$lectura
+#Documentos SIG	ctrobo	$lectura
+#Documentos SIG	asepulveda	$lectura
+#Documentos SIG	jefemant	$lectura
+#Documentos SIG	athomas	$lectura
+#Documentos SIG	jefeoper	$lectura
+#Documentos SIG	jzapata	$lectura
+#Documentos SIG	jefesegu	$lectura_escritura
+#Documentos SIG	malvarez	$lectura_escritura
+#Documentos SIG	fllona	$lectura_escritura
+#Documentos SIG	lorena	$lectura
+#Documentos SIG	lguazzetti	$lectura
+#Documentos SIG	personal	$lectura
+#Documentos SIG	hdau	$lectura
+#Documentos SIG	saturno	$lectura
+#Documentos SIG	darce	$lectura
+#Documentos SIG	srivarola	$lectura
+#Documentos SIG	stock	$lectura
+#Documentos SIG	gescobar	$lectura
+#Documentos SIG	supadmin	$lectura
+#Documentos SIG	mclementi	$lectura
+#Documentos SIG	gmedina	$lectura
+#Documentos SIG	asepulveda	$lectura
+#Documentos SIG	supmant	$lectura
+#Documentos SIG	supoper	$lectura
+#Documentos SIG	gtristan	$lectura
+#Documentos SIG	wkjer	$lectura
+#Documentos SIG	rdurruty	$lectura
+#Documentos SIG	jortiz	$lectura
+#Documentos SIG	jmiralles	$lectura
+#Documentos SIG	jugalde	$lectura
+#Documentos SIG	cnaya	$lectura
+#Documentos SIG	jcabrera	$lectura
+#Documentos SIG	sistemas	$total
+#
+##### fichadas zona primaria #### administracion personal
+#fichadas_zp	sistemas	$total
+#fichadas_zp	hdau	$lectura_escritura
+#fichadas_zp	personal	$lectura_escritura
+#
+##### gerencia #### administracion stock
+#gerencia	srivarola	$lectura_escritura
+#gerencia	sistemas	$total
+#gerencia	stock	$lectura_escritura
+#gerencia	lguazzetti	$lectura_escritura
+#gerencia	gescobar	$lectura_escritura
+#
+##### mantenimiento #### mantenimiento completo
+#mantenimiento	asepulveda	$lectura_escritura
+#mantenimiento	jefemant	$lectura_escritura
+#mantenimiento	athomas	$lectura_escritura
+#mantenimiento	sistemas	$total
+#mantenimiento	supmant	$lectura_escritura
+#mantenimiento	mclementi	$lectura_escritura
+#mantenimiento	gmedina	$lectura_escritura
+#
+##### Puestos ### mantenimiento completo, administracion personal, operaciones supervisores 
+#Puestos	dibujante	$lectura_escritura
+#Puestos	hdau	$lectura_escritura
+#Puestos	asepulveda	$lectura_escritura
+#Puestos	jefemant	$lectura_escritura
+#Puestos	athomas	$lectura_escritura
+#Puestos	sistemas	$total
+#Puestos	supmant	$lectura_escritura
+#Puestos	mclementi	$lectura_escritura
+#Puestos	gmedina	$lectura_escritura
+#Puestos	malvarez	$lectura_escritura
+#Puestos	fllona	$lectura_escritura
+#Puestos	jortiz	$lectura_escritura
+#Puestos	wkjer	$lectura_escritura
+#Puestos	rdurruty	$lectura_escritura
+#Puestos	gtristan	$lectura_escritura
+#Puestos	jmiralles	$lectura_escritura
+#Puestos	jzapata	$lectura_escritura
+#
+##### siclaser #### administracion facturacion
+#siclaser	aparle	$lectura_escritura
+#siclaser	lorena	$lectura_escritura
+#siclaser	lguazzetti	$lectura_escritura
+#siclaser	srivarola	$lectura_escritura
+#siclaser	sistemas	$total
+#siclaser	stock	$lectura_escritura
+#siclaser	gescobar	$lectura_escritura
+#siclaser	supadmin	$lectura_escritura
+#siclaser	darce	$lectura_escritura
+#
+##### sistemas #### sistemas
+#sistemas	sistemas	$total
+#sistemas	jefemant	$lectura_escritura
+#sistemas	athomas	$lectura_escritura
+#
+##### term2 #### mantenimiento completo
+#term2	asepulveda	$lectura_escritura
+#term2	jefemant	$lectura_escritura
+#term2	athomas	$lectura_escritura
+#term2	panol	$lectura_escritura
+#term2	dbustamante	$lectura_escritura
+#term2	ppantaleone	$lectura_escritura
+#term2	sistemas	$total
+#term2	supmant	$lectura_escritura
+#term2	mclementi	$lectura_escritura
+#term2	gmedina	$lectura_escritura
+#
+##### terminal2 #### mantenimiento completo
+#terminal2	asepulveda	$lectura_escritura
+#terminal2	jefemant	$lectura_escritura
+#terminal2	athomas	$lectura_escritura
+#terminal2	panol	$lectura_escritura
+#terminal2	dbustamante	$lectura_escritura
+#terminal2	ppantaleone	$lectura_escritura
+#terminal2	sistemas	$total
+#terminal2	supmant	$lectura_escritura
+#terminal2	mclementi	$lectura_escritura
+#terminal2	gmedina	$lectura_escritura
+#
+##### vigilan #### 
+#    vigilancia, administracion completo, mantenimiento,operaciones completo            
+#vigilan	aorofino	$lectura_escritura
+#vigilan	aparle	$lectura_escritura
+#vigilan	cnaya	$lectura_escritura
+#vigilan	ctrobo	$lectura_escritura
+#vigilan	asepulveda	$lectura_escritura
+#vigilan	embarque	$lectura_escritura
+#vigilan	gtristan	$lectura_escritura
+#vigilan	jcabrera	$lectura_escritura
+#vigilan	jefemant	$lectura_escritura
+#vigilan	athomas	$lectura_escritura
+#vigilan	jefeoper	$lectura_escritura
+#vigilan	jzapata	$lectura_escritura
+#vigilan	jefesegu	$lectura_escritura
+#vigilan	malvarez	$lectura_escritura
+#vigilan	fllona	$lectura_escritura
+#vigilan	jmiralles	$lectura_escritura
+#vigilan	jortiz	$lectura_escritura
+#vigilan	jugalde	$lectura_escritura
+#vigilan	lorena	$lectura_escritura
+#vigilan	lguazzetti	$lectura_escritura
+#vigilan	movimiento	$lectura_escritura
+#vigilan	personal	$lectura_escritura
+#vigilan	hdau	$lectura_escritura
+#vigilan	rdurruty	$lectura_escritura
+#vigilan	srivarola	$lectura_escritura
+#vigilan	sistemas	$total
+#vigilan	stock	$lectura_escritura
+#vigilan	gescobar	$lectura_escritura
+#vigilan	supadmin	$lectura_escritura
+#vigilan	darce	$lectura_escritura
+#vigilan	supmant	$lectura_escritura
+#vigilan	mclementi	$lectura_escritura
+#vigilan	gmedina	$lectura_escritura
+#vigilan	supoper	$lectura_escritura
+#vigilan	wkjer	$lectura_escritura
+#
+##### vigilan\Agenda #### administracion, vigilancia, mantenimiento, 
+ 
+#vigilan\Agenda	aorofino	$lectura_escritura
+#vigilan\Agenda	aparle	$lectura_escritura
+#vigilan\Agenda	cnaya	$lectura_escritura
+#vigilan\Agenda	ctrobo	$lectura_escritura
+#vigilan\Agenda	asepulveda	$lectura_escritura
+#vigilan\Agenda	jcabrera	$lectura_escritura
+#vigilan\Agenda	jefemant	$lectura_escritura
+#vigilan\Agenda	athomas	$lectura_escritura
+#vigilan\Agenda	jefeoper	$lectura_escritura
+#vigilan\Agenda	jzapata	$lectura_escritura
+#vigilan\Agenda	jefesegu	$lectura_escritura
+#vigilan\Agenda	fllona	$lectura_escritura
+#vigilan\Agenda	malvarez	$lectura_escritura
+#vigilan\Agenda	jugalde	$lectura_escritura
+#vigilan\Agenda	lorena	$lectura_escritura
+#vigilan\Agenda	lguazzetti	$lectura_escritura
+#vigilan\Agenda	panol	$lectura_escritura
+#vigilan\Agenda	ppantaleone	$lectura_escritura
+#vigilan\Agenda	dbustamante	$lectura_escritura
+#vigilan\Agenda	personal	$lectura_escritura
+#vigilan\Agenda	hdau	$lectura_escritura
+#vigilan\Agenda	srivarola	$lectura_escritura
+#vigilan\Agenda	sistemas	$total
+#vigilan\Agenda	stock	$lectura_escritura
+#vigilan\Agenda	gescobar	$lectura_escritura
+#vigilan\Agenda	supadmin	$lectura_escritura
+#vigilan\Agenda	darce	$lectura_escritura
+#vigilan\Agenda	supmant	$lectura_escritura
+#vigilan\Agenda	mclementi	$lectura_escritura
+#vigilan\Agenda	gmedina	$lectura_escritura
+#vigilan\Agenda	supoper	$lectura_escritura
+#
+##### vigilan\ordenes #### vigilancia, mantenimiento, operaciones supervisores, administracion
+
+#vigilan\ordenes	cnaya	$lectura_escritura
+#vigilan\ordenes	asepulveda	$lectura_escritura
+#vigilan\ordenes	embarque	$lectura_escritura
+#vigilan\ordenes	gtristan	$lectura_escritura
+#vigilan\ordenes	jcabrera	$lectura_escritura
+#vigilan\ordenes	jefemant	$lectura_escritura
+#vigilan\ordenes	athomas	$lectura_escritura
+#vigilan\ordenes	jefeoper	$lectura_escritura
+#vigilan\ordenes	jzapata	$lectura_escritura
+#vigilan\ordenes	jefesegu	$lectura_escritura
+#vigilan\ordenes	fllona	$lectura_escritura
+#vigilan\ordenes	malvarez	$lectura_escritura
+#vigilan\ordenes	jmiralles	$lectura_escritura
+#vigilan\ordenes	jortiz	$lectura_escritura
+#vigilan\ordenes	jugalde	$lectura_escritura
+#vigilan\ordenes	lorena	$lectura_escritura
+#vigilan\ordenes	lguazzetti	$lectura_escritura
+#vigilan\ordenes	movimiento	$lectura_escritura
+#vigilan\ordenes	personal	$lectura_escritura
+#vigilan\ordenes	hdau	$lectura_escritura
+#vigilan\ordenes	rdurruty	$lectura_escritura
+#vigilan\ordenes	srivarola	$lectura_escritura
+#vigilan\ordenes	sistemas	$total
+#vigilan\ordenes	stock	$lectura_escritura
+#vigilan\ordenes	gescobar	$lectura_escritura
+#vigilan\ordenes	supadmin	$lectura_escritura
+#vigilan\ordenes	darce	$lectura_escritura
+#vigilan\ordenes	supmant	$lectura_escritura
+#vigilan\ordenes	mclementi	$lectura_escritura
+#vigilan\ordenes	gmedina	$lectura_escritura
+#vigilan\ordenes	supoper	$lectura_escritura
+#vigilan\ordenes	wkjer	$lectura_escritura
+
+
+
+
+
+# man de Icacls 
+# por fin m$ hace algo de documentacion.
+#ICACLS nombre /save archivoACL [/T] [/C] [/L] [/Q]
+#    almacena las DACL para los archivos y carpetas cuyos nombres coinciden
+#    en archivoACL para su uso posterior con /restore. Tenga en cuenta que no
+#    se guardan las SACL, el propietario ni las etiquetas de identidad.
+#
+#ICACLS directorio [/substitute SidOld SidNew [...]] /restore archivoACL
+#                  [/C] [/L] [/Q]
+#    aplica las DACL almacenadas a los archivos del directorio.
+#
+#ICACLS nombre /setowner usuario [/T] [/C] [/L] [/Q]
+#    cambia el propietario de todos los nombres coincidentes. Esta opci¢n
+#    no fuerza un cambio de propiedad; use la utilidad takeown.exe
+#    con esta finalidad.
+#
+#ICACLS nombre /findsid Sid [/T] [/C] [/L] [/Q]
+#    busca todos los nombres coincidentes que contienen una ACL
+#    que menciona el SID de forma expl¡cita.
+#
+#ICACLS nombre /verify [/T] [/C] [/L] [/Q]
+#    busca todos los archivos cuya ACL no est  en formato can¢nico o cuyas
+#    longitudes no son coherentes con los recuentos de la ACE.
+#
+#ICACLS nombre /reset [/T] [/C] [/L] [/Q]
+#    reemplaza las ACL con ACL heredadas predeterminadas para todos
+#    los archivos coincidentes.
+#
+#ICACLS nombre [/grant[:r] Sid:perm[...]]
+#       [/deny Sid:perm [...]]
+#       [/remove[:g|:d]] Sid[...]] [/T] [/C] [/L] [/Q]
+#       [/setintegritylevel nivel:directiva[...]]
+#
+#    /grant[:r] Sid:perm concede los derechos de acceso al usuario
+#        especificado. Con :r, los permisos reemplazan cualquier permiso
+#        expl¡cito concedido anteriormente. Sin :r, los permisos se agregan a
+#        cualquier permiso expl¡cito concedido anteriormente.
+#
+#    /deny Sid:perm deniega de forma expl¡cita los derechos de acceso al
+#        usuario especificado. Se agrega una ACE de denegaci¢n expl¡cita
+#        para los permisos indicados y se quitan los mismos permisos de
+#        cualquier concesi¢n expl¡cita.
+#
+#    /remove[:[g|d]] Sid quita todas las repeticiones del SID en la ACL. Con
+#        :g, quita todas las repeticiones de derechos concedidos a ese SID. Con
+#        :d, quita todas las repeticiones de derechos denegados a ese SID.
+#
+#    /setintegritylevel [(CI)(OI)]nivel agrega de forma expl¡cita una ACE de
+#        integridad a todos los archivos coincidentes. El nivel se debe
+#        especificar como:
+#            L[ow] - para bajo
+#            M[edium] - para medio
+#            H[igh] - para alto
+#        Las opciones de herencia para la ACE de integridad pueden preceder al
+#        nivel y se aplican s¢lo a los directorios.
+#
+#    /inheritance:e|d|r
+#        e - habilita la herencia
+#        d - deshabilita la herencia y copia las ACE
+#        r - quita todas las ACE heredadas
+#
+#Nota:
+#    Los SID pueden tener un formato numrico o de nombre descriptivo. Si se da
+#    un formato numrico, agregue un asterisco (*) al principio del SID.
+#
+#    /T indica que esta operaci¢n se realiza en todos los archivos o
+#        directorios coincidentes bajo los directorios especificados en el
+#        nombre.
+#
+#    /C indica que esta operaci¢n continuar  en todos los errores de archivo.
+#        Se seguir n mostrando los mensajes de error.
+#
+#    /L indica que esta operaci¢n se realiza en el v¡nculo simb¢lico en s¡
+#        en lugar de en su destino.
+#
+#    /Q indica que icacls debe suprimir los mensajes de que las operaciones
+#       se realizaron correctamente.
+#
+#    ICACLS conserva el orden can¢nico de las entradas ACE:
+#            Denegaciones expl¡citas
+#            Concesiones expl¡citas
+#            Denegaciones heredadas
+#            Concesiones heredadas
+#
+#    perm es una m scara de permiso que puede especificarse de dos formas:
+#        una secuencia de derechos simples:
+#                N - sin acceso
+#                F - acceso total
+#                M - acceso de modificaci¢n
+#                RX - acceso de lectura y ejecuci¢n
+#                R - acceso de s¢lo lectura
+#                W - acceso de s¢lo escritura
+#                D - acceso de eliminaci¢n
+#        una lista separada por comas entre parntesis de derechos espec¡ficos:
+#                DE - eliminar
+#                RC - control de lectura
+#                WDAC - escribir DAC
+#                WO - escribir propietario
+#                S - sincronizar
+#                AS - acceso al sistema de seguridad
+#                MA - m ximo permitido
+#                GR - lectura genrica
+#                GW - escritura genrica
+#                GE - ejecuci¢n genrica
+#                GA - todo genrico
+#                RD - leer datos/lista de directorio
+#                WD - escribir datos/agregar archivo
+#                AD - anexar datos/agregar subdirectorio
+#                REA - leer atributos extendidos
+#                WEA - escribir atributos extendidos
+#                X - ejecutar/atravesar
+#                DC - eliminar secundario
+#                RA - leer atributos
+#                WA - escribir atributos
+#        los derechos de herencia pueden preceder a cualquier forma y se
+#        aplican s¢lo a directorios:
+#                (OI) - herencia de objeto
+#                (CI) - herencia de contenedor
+#                (IO) - s¢lo herencia
+#                (NP) - no propagar herencia
+#                (I) - permiso heredado del contenedor principal
+#
+#Ejemplos:
+#
+#        icacls c:\windows\* /save archivoACL /T
+#        - Guardar  todas las ACL para todos los archivos en c:\windows
+#          y sus subdirectorios en archivoACL.
+#
+#        icacls c:\windows\ /restore archivoACL
+#        - Restaurar  todas las ACL para cada archivo dentro de
+#          archivoACL que exista en c:\windows y sus subdirectorios.
+#
+#        icacls file /grant Administrador:(D,WDAC)
+#        - Conceder  al usuario permisos de administrador para eliminar y
+#          escribir DAC en el archivo.
+#
+#        icacls file /grant *S-1-1-0:(D,WDAC)
+#        - Conceder  al usuario definido por el SID S-1-1-0 permisos para
+#          eliminar y escribir DAC en el archivo.

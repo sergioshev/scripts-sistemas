@@ -1,0 +1,19 @@
+#!/bin/bash
+
+[ -z "$1" ] && {
+  cat <<FFAA
+Modo de uso:
+
+  $0 <user>
+FFAA
+  exit 1
+}
+
+echo -e "Creando usuario de sistema..."
+adduser $1
+
+echo -e "\nCreando carpetas de imap..."
+/root/bin/generateFolders $1
+
+echo -e "\nSeteando password de email..."
+saslpasswd2 $1

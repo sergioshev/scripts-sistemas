@@ -1,0 +1,47 @@
+#!/bin/bash
+#
+#  Script para elimir la joda del maloso.
+#
+#    se busca en la raiz los archivos
+#      data.cab
+#      instalar.bat
+#      autorun.inf  
+#      Nod_32.bat
+#
+#    en el directorio de windows (%windir%, se asume windows)
+#      cmdow.exe
+#      maloso.bat
+#      maloso.inf
+#      maloso.reg    
+# 
+#    se espera como parametro el punto de montaje 
+#    el sistema de archivos windows y se lo procesa
+
+[ $# -lt 1 ] && { echo uso: $0 punto_montaje_windows ; }
+rootfs="$1"
+windirs="WINDOWS WINDOWS.0"
+files_root="data.cab instalar.bat Nod_32.bat autorun.inf"
+files_win="cmdow.exe maloso.bat maloso.inf maloso.reg"
+
+function del_file()
+{
+  file="$1"
+  echo $file
+  if [ -f "$file" ] ; then
+    echo "encontrado $file." 
+    rm -rf "$f"
+  fi
+}
+
+for f in $files_root ; do
+  del_file "$rootfs/$f"
+done
+
+
+for windir in $windirs ; do 
+  if [ -d "$rootfs/$windir" ] ; then
+    for f in $files_win ; do 
+      del_file "$rootfs/$windir/$f"
+    done
+  fi
+done

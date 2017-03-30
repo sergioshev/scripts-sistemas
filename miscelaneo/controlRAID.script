@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# $Id: controlRAID.script,v 1.1 2011-01-05 17:58:37 aosorio Exp $
+#
+# Este script ejecuta el utilitario de control de RAID sobre el dispositivo
+# /dev/cciss/c0d0. En caso de no encontrarlo en correcto estado envía un 
+# mensaje por salida estándar y a un archivo de log.
+#
+
+EXE=/usr/bin/cciss_vol_status
+DEV=/dev/cciss/c0d0
+MSJ_ERR='Se ha encontrado un posible error en el RAID. Verificar esto inmediatamente.'
+LOG=/var/log/error-raid.log
+
+$EXE $DEV | grep 'status: OK' >> /dev/null
+
+if [ $? != 0 ] ; then
+  echo -e "$MSJ_ERR\n" ;
+  echo -e $( date +%d%m%Y ) "\n$MSJ_ERR" >> "$LOG\n" ;
+  exit 1 ;
+fi

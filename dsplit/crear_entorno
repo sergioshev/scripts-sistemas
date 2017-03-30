@@ -1,0 +1,24 @@
+#!/bin/bash
+
+dst_dir="/var/tmp/prueba_split"
+files_count=${1:-10000}
+depth=${2:-3}
+file_size=${3:-819200}
+variadic_p=10
+
+
+echo "Creando $files_count archivos de $file_size bytes"
+echo "Profundidad $depth"
+for (( i=0 ; i < $files_count ; i++ )) ; do 
+  f=''
+  for (( j=0 ; j < $depth ; j++ )) ; do 
+    f="$(($RANDOM % 15))/$f" ; 
+  done
+  mkdir -p "$dst_dir/$f"
+  dd if=/dev/zero of="$dst_dir/$f/${RANDOM}.img" \
+    bs=1 \
+    count=0 \
+    seek=$(($file_size + $file_size * ($RANDOM % $variadic_p) / 100 )) &> /dev/null
+  echo -ne "$(($i+1)) | $((($i+1)*100/$files_count))%\r"
+done
+echo

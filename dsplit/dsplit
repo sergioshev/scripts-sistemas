@@ -1,0 +1,70 @@
+#!/bin/bash
+
+src_dir=$1
+
+
+if [ -z "$1" ] ; then
+cat <<FFAA
+Usage: dsplit <dir_to_split> [ <destination folder> ] [ <bin size> ]
+  Splits folder's contents into "SIZED" bins. Destination bins will
+  contain hard links to original files preserving the path.
+
+  <dir to split> - directory to split into bins
+
+  <destination folder> - folder to put bins into
+    default value = /var/tmp/dsplit
+
+  <bin size> - fill each bin with {bin size} bytes
+    default value = 25232932864 (23.5 Gib)
+FFAA
+  exit 0;
+fi
+
+#in bytes
+# 23 GiB             M      K      B
+default_size=$((23 * 1024 * 1024 * 1024))
+
+dst_dir=${2:-"/var/tmp/dsplit"}
+bin_size=${3:-$default_size}
+
+bin_name="bin"
+
+find "$src_dir" -depth -type f  > /var/tmp/biglist
+mkdir -p "$dst_dir"
+
+bytes_count=0
+current_file_size=0
+current_bin_index=0
+current_bin_dir="$dst_dir/${bin_name}_${current_bin_index}"
+
+cat <<FFAA
+Spliting [$src_dir] by size $bin_size
+FFAA
+
+size=$(cat /var/tmp/biglist | wc -l)
+count=0
+
+cat /var/tmp/biglist | while read f ; do
+  count=$(($count+1))
+  perc=$(($count*100/$size))
+  current_file_size=$(stat -c %s "$f")
+  current_file_dir=${f%/*}
+  current_file_dir=${current_file_dir#/}
+  current_file_name=${f##*/}
+
+  if [ $(($bytes_count+$current_file_size)) -gt $bin_size ] ; then
+    bytes_count=$current_file_size
+    current_bin_index=$(($current_bin_index+1))
+    current_bin_dir="$dst_dir/${bin_name}_${current_bin_index}"
+    mkdir -p "$current_bin_dir"
+    echo -e "\nCreating new bin in: $current_bin_dir"
+  else
+    bytes_count=$(($bytes_count+$current_file_size))
+  fi
+  if [ ! -d "$current_bin_dir/$current_file_dir" ] ; then
+    mkdir -p "$current_bin_dir/$current_file_dir"
+  fi 
+  ln "$f" "$current_bin_dir/$current_file_dir/$current_file_name"
+  echo -en "Bytes count ($perc %) $bytes_count\r"
+done
+

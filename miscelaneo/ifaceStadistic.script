@@ -1,0 +1,38 @@
+#!/bin/bash
+#
+# $Id: ifaceStadistic.script,v 1.1 2011-01-29 14:38:18 aosorio Exp $
+#
+# Script para sacar estadísticas de tráfico por interfaz utilizando el iptraf.
+#
+
+dest_mail="aosorio@terminalquequen.com.ar,lvillarreal@terminalquequen.com.ar,athomas@terminalquequen.com.ar"
+asunto_mail="Promedio de carga por interfaz en $( uname -n )"
+mail=/usr/bin/mail
+
+muestreo=60
+log_file=/var/log/iptraf/iface_stats_general.log
+log_parseado=/var/log/iptraf/parsedLog.log
+
+function cleanLogs
+{
+  rm -f "$log_file" "$log_parseado"
+}
+
+cleanLogs
+
+command="iptraf -g -B -t $muestreo"
+
+$command
+
+while [ "$( ps ax | grep "$command" | grep -v 'grep' | wc -l )" != 0 ] ; do
+  # espero 60 segundos porque el -t de iptraf es en minutos.
+  sleep 60
+done
+
+echo -e "--- Estadistica de carga por interfaz en servidor Euro. ---\n\nLos resultados fueron medidos en con un muestreo de $muestreo minuto/s.\n\n" >> "$log_parseado"
+
+sed -n 's/\(^.*\):.*average\ activity\ \(.*\),\ peak.*$/Placa: \1\tCarga promedio: \t\2/p' "$log_file" >> "$log_parseado"
+
+cat "$log_parseado" | $mail -s "$asunto_mail" "$dest_mail"
+
+cleanLogs
