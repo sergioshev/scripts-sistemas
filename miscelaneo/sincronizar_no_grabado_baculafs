@@ -1,0 +1,42 @@
+#!/bin/bash
+
+#/var/backups/bacula es un link simbolico a 
+# /home/bacula_local_fs/var/backups/bacula
+dirbackups=/var/backups/bacula
+
+localfs=/home/bacula_local_fs
+query="SELECT name,
+              storage
+         FROM tq_consulta_volumen_no_grabado"
+
+baculadir=bacula-dir.terminalquequen.com.ar
+baculasd=bacula-sd.terminalquequen.com.ar
+
+for i in $( ssh $baculadir "echo \"$query\" | psql -AU bacula bacula" | \
+    head -n -1 | tail -n +2 | xargs ) ; do
+  volume=$( echo $i | cut -f 1 -d \| )
+  storage=$( echo $i | cut -f 2 -d \| | sed 's/-storage//' )
+  file="$dirbackups/$storage/$volume"
+  echo "Procesando $file"
+  md5_remote='remote'
+  md5_remote=$(ssh $baculasd "{ head -c 10240K $file ;  tail -c 10240K $file ; } | md5sum -b | sed -e \"s/^\(\S\+\).*/\1/\"")
+  echo "  md5 remoto $md5_remote"
+  echo "  rsync -uaR $baculasd:$file $localfs"
+  rsync -uaR $baculasd:$file "$localfs/"
+  local_file=$file
+  echo "  archivo local $local_file"
+  if [ -r "$local_file" ] ; then
+    md5='local'
+    md5=$({ head -c 10240K $local_file ;  tail -c 10240K $local_file ; } | md5sum -b | sed -e "s/^\(\S\+\).*/\1/")
+    echo "  md5 local $md5"
+    if [ $md5 == $md5_remote ] ; then
+      echo "  md5 coincide. Ok"
+    else
+      echo "  ERROR: al copiar, se borra"
+      rm -f $local_file
+    fi
+  else
+    echo "  ERROR: no se copio el archivo"
+  fi
+done
+

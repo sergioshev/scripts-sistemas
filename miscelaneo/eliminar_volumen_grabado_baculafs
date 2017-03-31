@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#/var/backups/bacula es un link simbolico a 
+# /home/bacula_local_fs/var/backups/bacula
+dirbackups=/var/backups/bacula
+
+localfs=/home/bacula_local_fs
+query="SELECT name
+         FROM tq_consulta_volumen_no_grabado"
+
+baculadir=bacula-dir.terminalquequen.com.ar
+baculasd=bacula-sd.terminalquequen.com.ar
+
+#find "$localfs" -type f -printf "%f\n" > /tmp/volumenes_locales
+find "$localfs" -type f > /tmp/volumenes_locales
+ssh $baculadir "echo \"$query\" | psql -AU bacula bacula" | \
+  head -n -1 | tail -n +2 > /tmp/volumenes_no_grabados
+
+cat /tmp/volumenes_locales | \
+  grep -v -f /tmp/volumenes_no_grabados > \
+  /tmp/volumenes_locales_candidatos
+
+cat /tmp/volumenes_locales_candidatos | while read f ; do
+ true
+  echo rm -f "$f" 
+  rm -f "$f" 
+done
+
+echo "Volumenes locales               : $(cat /tmp/volumenes_locales | wc -l)"
+echo "Volumenes no grabados (desde BD): $(cat /tmp/volumenes_no_grabados | wc -l)"
+echo "Volumenes eliminados            : $(cat /tmp/volumenes_locales_candidatos | wc -l)"
+
+
